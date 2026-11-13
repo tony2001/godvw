@@ -114,6 +114,8 @@ func TestParseScoutCodeSpecialDescriptionsDependOnEvaluation(t *testing.T) {
 	}{
 		{name: "serve in net is let", code: "*01SH+~~~~~~~~N", want: "Let"},
 		{name: "attack in net on winning attack is let", code: "*01AH#~~~~~~~~N", want: "Let"},
+		{name: "net contact on winning attack", code: "*01AH#~~~~~~~~I", want: "Net contact"},
+		{name: "fixture attack with net contact", code: "*01AH#V3~34DP1I", want: "Net contact"},
 		{name: "invalid special is not decoded", code: "*01AH/~~~~~~~~I", want: "Unexpected I"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,6 +125,12 @@ func TestParseScoutCodeSpecialDescriptionsDependOnEvaluation(t *testing.T) {
 			}
 			if parsed.Special != tc.want {
 				t.Errorf("special = %q, want %q", parsed.Special, tc.want)
+			}
+			if strings.HasPrefix(tc.want, "Unexpected ") && len(parsed.Issues) == 0 {
+				t.Error("unexpected special code produced no issue")
+			}
+			if !strings.HasPrefix(tc.want, "Unexpected ") && len(parsed.Issues) != 0 {
+				t.Errorf("valid special code reported issues: %#v", parsed.Issues)
 			}
 		})
 	}

@@ -307,7 +307,7 @@ func parseAutomaticScoutCode(raw string, code *ScoutCode) bool {
 			code.Evaluation = "Error"
 		}
 	case strings.Contains(strings.ToUpper(raw), ">LUP"):
-	setTeamFromCode(raw, code)
+		setTeamFromCode(raw, code)
 	case pointCode.MatchString(raw):
 		match := pointCode.FindStringSubmatch(raw)
 		setTeamFromCode(raw, code)
@@ -642,8 +642,11 @@ func specialDescription(skill, evaluation, special string) string {
 	if skill == "A" {
 		switch evaluation {
 		case "#":
-			if special == "N" {
+			switch special {
+			case "N":
 				return "Let"
+			case "I":
+				return "Net contact"
 			}
 			return attackWinningSpecialDescriptions[special]
 		case "+", "-", "!", "/":
@@ -671,7 +674,7 @@ func validSpecialCode(skill, evaluation, special string) bool {
 		case "=":
 			return strings.Contains("SONIZA", special)
 		case "#":
-			return strings.Contains("SOFXN", special)
+			return strings.Contains("SOFXNI", special)
 		case "+", "-", "!", "/":
 			return strings.Contains("CN", special)
 		default:
