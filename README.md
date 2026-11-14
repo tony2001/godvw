@@ -8,12 +8,57 @@ and uses the first line-ending style for lines without a terminator. Serialized
 documents with at least one line always end with a newline. Applications can
 edit known fields without discarding metadata they do not understand.
 
+Install it with:
+
+```sh
+go get github.com/tony2001/godvw
+```
+
 Values are returned as byte-preserving Go strings; `MatchMetadata` exposes the
 encoding label in `[3MATCH]`, and `DecodeDVUTF8` handles DataVolley's embedded
 Unicode tokens. Legacy text is not transcoded, so callers can preserve it
 exactly or decode it with a charset package of their choice. Row-writing
 helpers reject semicolons and line breaks inside cells. Scouting codes are
 decoded with `ParseScoutCode` using the standard DataVolley convention.
+
+## Read and write a DVW file
+
+`Read` parses a file from an `io.Reader`; `Write` serializes it to an
+`io.Writer`. This example copies a match while preserving unrecognized sections
+and the source line endings:
+
+```go
+package main
+
+import (
+	"os"
+
+	dvw "github.com/tony2001/godvw"
+)
+
+func copyMatch(inputPath, outputPath string) error {
+	input, err := os.Open(inputPath)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+
+	match, err := dvw.Read(input)
+	if err != nil {
+		return err
+	}
+
+	output, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+
+	return match.Write(output)
+}
+```
+
+Use `Parse` and `Marshal` instead when working with a byte slice.
 
 ## Scouting record format
 
@@ -144,36 +189,6 @@ metadata sections. Player names require roster lookup.
 The standard evaluation descriptions are based on the [DataVolley Media
 handbook](https://dataprojectwebsoftware.blob.core.windows.net/software/dvw4media/DataVolleyMedia_handbook.pdf)
 and the [datavolley R package decoder](https://github.com/openvolley/datavolley/blob/master/R/plays.R).
-
-```go
-package main
-
-import (
-    "os"
-
-    "github.com/tony2001/godvw"
-)
-
-func copyMatch() error {
-    input, err := os.Open("match.dvw")
-    if err != nil {
-        return err
-    }
-    defer input.Close()
-
-    f, err := dvw.Read(input)
-    if err != nil {
-        return err
-    }
-
-    output, err := os.Create("copy.dvw")
-    if err != nil {
-        return err
-    }
-    defer output.Close()
-    return f.Write(output)
-}
-```
 
 `NewFile` creates an empty section skeleton; teams, rosters, and set metadata
 must be populated before relying on the file in DataVolley software.
