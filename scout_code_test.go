@@ -26,23 +26,28 @@ func TestParseScoutCodeSkillAndEvaluation(t *testing.T) {
 	}
 }
 
-func TestParseScoutCodeConventionStyles(t *testing.T) {
+func TestParseScoutCodeDataVolleyEvaluations(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		style ScoutCodeStyle
-		want  string
+		name    string
+		raw     string
+		want    string
+		isError bool
+		isPoor  bool
 	}{
-		{name: "default", style: ScoutCodeStyleDefault, want: "Invasion"},
-		{name: "volleymetrics", style: ScoutCodeStyleVolleyMetrics, want: "Poor, opposition to replay"},
-		{name: "german", style: ScoutCodeStyleGerman, want: "Error"},
+		{name: "block invasion", raw: "*01BH/", want: "Invasion", isError: true},
+		{name: "block error", raw: "*01BH=", want: "Error", isError: true},
+		{name: "poor set", raw: "*01EH/", want: "Poor", isPoor: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			code, err := ParseScoutCodeWithOptions("*01BH/", ScoutCodeOptions{Style: tc.style})
+			code, err := ParseScoutCode(tc.raw)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if code.Evaluation != tc.want {
 				t.Errorf("evaluation = %q, want %q", code.Evaluation, tc.want)
+			}
+			if code.IsError() != tc.isError || code.IsPoorEvaluation() != tc.isPoor {
+				t.Errorf("unexpected DataVolley semantics: %+v", code)
 			}
 		})
 	}
@@ -80,6 +85,23 @@ func TestParseScoutCodeAutomaticRecordsRequireTeamMarker(t *testing.T) {
 			}
 			if len(code.Issues) == 0 || !strings.Contains(code.Issues[0].Message, "Team entries") {
 				t.Fatalf("expected missing team diagnostic, got %#v", code.Issues)
+			}
+		})
+	}
+}
+
+func TestParseScoutCodeAutomaticRecordsRejectTrailingJunk(t *testing.T) {
+	for _, raw := range []string{"*p12:09extra", "*z3extra", "**3setextra", "xp12:09"} {
+		t.Run(raw, func(t *testing.T) {
+			code, err := ParseScoutCode(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if code.Point || code.SetterPosition != 0 || code.EndOfSet {
+				t.Fatalf("malformed automatic code was accepted: %#v", code)
+			}
+			if len(code.Issues) == 0 {
+				t.Fatalf("malformed automatic code produced no diagnostic: %#v", code)
 			}
 		})
 	}
@@ -187,11 +209,32 @@ func TestParseScoutCodeSetAndLocationOptions(t *testing.T) {
 	}
 }
 
+func TestParseScoutCodeValidatesFreeballType(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		code       string
+		wantIssues bool
+	}{
+		{name: "known type", code: "*01FF+"},
+		{name: "unknown type", code: "*01FX+", wantIssues: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parsed, err := ParseScoutCode(tc.code)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotIssues := len(parsed.Issues) != 0; gotIssues != tc.wantIssues {
+				t.Errorf("issues = %#v, want issue presence %t", parsed.Issues, tc.wantIssues)
+			}
+		})
+	}
+}
+
 func TestFileScoutCodeOptionsReadDescriptions(t *testing.T) {
 	file := &File{}
 	file.AddSection(SectionAttackCombination).Lines = []Line{{Text: "X5;4;R;H;High set in 4;;;"}}
 	file.AddSection(SectionSetterCall).Lines = []Line{{Text: "K1;;Front Quick;"}}
-	options := file.ScoutCodeOptions(ScoutCodeStyleDefault)
+	options := file.ScoutCodeOptions()
 
 	attack, err := ParseScoutCodeWithOptions("*01AH#X5", options)
 	if err != nil {
@@ -217,10 +260,7 @@ func TestValidateScoutCodeReportsMalformedCode(t *testing.T) {
 	if len(issues) == 0 {
 		t.Fatal("expected a missing-field issue")
 	}
-	if _, err := ParseScoutCodeWithOptions("*01SH+", ScoutCodeOptions{Style: "other"}); err == nil {
-		t.Fatal("unsupported style unexpectedly succeeded")
-	}
-	issues, err = ValidateScoutCodeWithOptions("*01BH/", ScoutCodeOptions{Style: ScoutCodeStyleVolleyMetrics})
+	issues, err = ValidateScoutCodeWithOptions("*01BH/", ScoutCodeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,9 +12,8 @@ Values are returned as byte-preserving Go strings; `MatchMetadata` exposes the
 encoding label in `[3MATCH]`, and `DecodeDVUTF8` handles DataVolley's embedded
 Unicode tokens. Legacy text is not transcoded, so callers can preserve it
 exactly or decode it with a charset package of their choice. Row-writing
-helpers reject semicolons and line breaks inside cells. Scouting codes can be
-decoded with `ParseScoutCode`; evaluation labels support DataVolley, German,
-and VolleyMetrics conventions.
+helpers reject semicolons and line breaks inside cells. Scouting codes are
+decoded with `ParseScoutCode` using the standard DataVolley convention.
 
 ## Scouting record format
 
@@ -45,8 +44,8 @@ full row normally ends in a semicolon.
 `ParseScoutRow` and `ParseScoutRecord` accept shorter rows and pad omitted
 cells with empty strings; they reject rows with more than 27 cells. Parsing
 does not imply validation. `ScoutRecord.Validate` checks row fields and code
-syntax under the default conventions; `ValidateWithOptions` selects another
-code convention.
+syntax. `ScoutRecord.DecodedCode` and `DecodedCodeWithOptions` return
+the parsed `ScoutCode`, including its semantic helper methods.
 
 ```go
 package main
@@ -89,16 +88,15 @@ independent of the three four-digit coordinates in the `[3SCOUT]` row.
 Common skill codes are `S` serve, `R` reception, `E` set, `A` attack, `B`
 block, `D` dig, and `F` freeball. For example, `*07SM+` is a home-team serve;
 `M` identifies its type and `+` its evaluation. Evaluation meanings depend on
-both skill and scouting convention: under the default mapping, `S#` is an
-ace, `R#` a perfect pass, and `A#` a winning attack. VolleyMetrics and German
-modes change some mappings, particularly for blocks and block cover.
+the skill. `S#` is an ace, `R#` a perfect pass, and `A#` a winning attack.
 
 The parser also recognizes non-contact records, including `*p12:09` (point
 and score), `*T` (timeout), `*P04` (substitution), `*z3` / `az3` (setter
 position), and `**3set` (end of set). Codes containing `>LUp` are recognized as
 lineup updates and left for the caller to handle as metadata.
 
-`ParseScoutCode` decodes a code directly:
+`ParseScoutCode` decodes a code directly. Use `File.ScoutCodeOptions` to include
+attack-combination and setter-call descriptions from a file:
 
 ```go
 import (
@@ -108,7 +106,7 @@ import (
 )
 
 func decodeExample(file *dvw.File) error {
-    options := file.ScoutCodeOptions(dvw.ScoutCodeStyleDefault)
+    options := file.ScoutCodeOptions()
     code, err := dvw.ParseScoutCodeWithOptions("*07SM+", options)
     if err != nil {
         return err
@@ -130,17 +128,22 @@ func decodeExample(file *dvw.File) error {
 number, skill, type, evaluation, attack or setter-call code, locations, subtype,
 player count, special code, and custom suffix. A `$$` player marker sets
 `UnknownPlayer`. `ScoutCode.Issues` contains non-fatal diagnostics with a
-message and severity; unknown values remain available for inspection. Empty
-codes and unsupported styles return errors.
+message and severity; unknown values remain available for inspection.
+Semantic predicates use `SkillCode` and `EvaluationCode`;
+the decoded `Skill` and `Evaluation` strings are for display. Empty codes
+return errors.
 
-The available styles are `ScoutCodeStyleDefault`,
-`ScoutCodeStyleVolleyMetrics`, and `ScoutCodeStyleGerman`; an empty style means
-default. `ScoutCodeOptions` also has `Beach` and `Cones` switches for beach
-volleyball descriptions and cone-based attack destinations. Non-nil
+`ScoutCodeOptions` has `Beach` and `Cones` switches for beach-volleyball
+descriptions and cone-based attack destinations. Non-nil
 `AttackCombinations` and `SetterCalls` maps enable metadata lookup and report
 unmatched codes. `File.ScoutCodeOptions` builds these maps from the matching
-metadata sections. Player names require roster lookup; custom parser callbacks
-are application-specific.
+metadata sections. Player names require roster lookup.
+
+### Scouting-code references
+
+The standard evaluation descriptions are based on the [DataVolley Media
+handbook](https://dataprojectwebsoftware.blob.core.windows.net/software/dvw4media/DataVolleyMedia_handbook.pdf)
+and the [datavolley R package decoder](https://github.com/openvolley/datavolley/blob/master/R/plays.R).
 
 ```go
 package main

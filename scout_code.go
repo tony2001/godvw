@@ -2,29 +2,13 @@ package dvw
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 )
 
-// ScoutCodeStyle selects the evaluation and skill-type conventions used when
-// decoding a scouting code.
-type ScoutCodeStyle string
-
-const (
-	// ScoutCodeStyleDefault follows the standard DataVolley conventions.
-	ScoutCodeStyleDefault ScoutCodeStyle = "default"
-	// ScoutCodeStyleVolleyMetrics follows VolleyMetrics evaluation conventions.
-	ScoutCodeStyleVolleyMetrics ScoutCodeStyle = "volleymetrics"
-	// ScoutCodeStyleGerman follows the German DVV conventions.
-	ScoutCodeStyleGerman ScoutCodeStyle = "german"
-)
-
-// ScoutCodeOptions controls convention-dependent scouting-code decoding.
+// ScoutCodeOptions controls optional scouting-code metadata and court decoding.
 type ScoutCodeOptions struct {
-	// Style controls evaluation and serve-type labels. Empty means default.
-	Style ScoutCodeStyle
 	// Beach selects beach-volleyball serve and block-count descriptions.
 	Beach bool
 	// Cones interprets an attack's destination digit as a cone instead of a zone.
@@ -37,7 +21,7 @@ type ScoutCodeOptions struct {
 	SetterCalls map[string]string
 }
 
-// ScoutCodeIssue describes a non-fatal syntax or convention issue. The R
+// ScoutCodeIssue describes a non-fatal scouting-code diagnostic. The R
 // datavolley parser reports many such conditions while retaining decoded data.
 type ScoutCodeIssue struct {
 	// Message explains the parser diagnostic.
@@ -68,7 +52,7 @@ type ScoutCode struct {
 	SkillType string
 	// EvaluationCode is the one-character evaluation code.
 	EvaluationCode string
-	// Evaluation is the label decoded under the selected convention.
+	// Evaluation is the DataVolley label for EvaluationCode.
 	Evaluation string
 	// AttackCode is the attack-combination code for an attack.
 	AttackCode string
@@ -112,6 +96,10 @@ type ScoutCode struct {
 	Timeout bool
 	// Substitution reports a substitution record.
 	Substitution bool
+	// SubstitutionOut is the outgoing jersey number in a substitution record.
+	SubstitutionOut int
+	// SubstitutionIn is the incoming jersey number in a substitution record.
+	SubstitutionIn int
 	// EndOfSet reports an end-of-set record.
 	EndOfSet bool
 	// RotationError reports a rotation-error record.
@@ -125,9 +113,9 @@ type ScoutCode struct {
 }
 
 var (
-	endOfSetCode = regexp.MustCompile(`(?i)^\*\*\dset`)
-	pointCode    = regexp.MustCompile(`^.p(\d+):(\d+)`)
-	setterCode   = regexp.MustCompile(`^([*a])z(\d+)`)
+	endOfSetCode = regexp.MustCompile(`(?i)^\*\*\dset$`)
+	pointCode    = regexp.MustCompile(`^([*a])p(\d+):(\d+)$`)
+	setterCode   = regexp.MustCompile(`^([*a])z(\d+)$`)
 	playerCode   = regexp.MustCompile(`^([*a])(\d+)`)
 )
 
@@ -169,10 +157,8 @@ var skillTypeDescriptions = map[string]string{
 	"O": "Other",
 }
 
-var indoorServeTypeDescriptions = map[ScoutCodeStyle]map[string]string{
-	ScoutCodeStyleDefault:       {"H": "Float", "M": "Jump-float", "Q": "Jump", "T": "Topspin"},
-	ScoutCodeStyleVolleyMetrics: {"H": "Float", "M": "Jump-float", "Q": "Jump", "T": "Float"},
-	ScoutCodeStyleGerman:        {"H": "Float", "M": "Jump-float", "Q": "Jump", "T": "Jump"},
+var indoorServeTypeDescriptions = map[string]string{
+	"H": "Float", "M": "Jump-float", "Q": "Jump", "T": "Topspin",
 }
 
 var beachServeTypeDescriptions = map[string]string{
@@ -209,24 +195,6 @@ var evaluationDescriptions = map[string]map[string]string{
 	},
 }
 
-var volleyMetricsEvaluationDescriptions = map[string]map[string]string{
-	"B": {
-		"/": "Poor, opposition to replay", "!": "Poor, blocking team cannot recover",
-		"-": "Poor block", "+": "Positive block",
-	},
-	"D": {"/": "Positive block cover", "!": "Poor block cover"},
-	"E": {"/": "Error"},
-}
-
-var germanEvaluationDescriptions = map[string]map[string]string{
-	"B": {"/": "Error", "=": "Invasion", "-": "Poor block"},
-}
-
-var evaluationDescriptionsByStyle = map[ScoutCodeStyle]map[string]map[string]string{
-	ScoutCodeStyleVolleyMetrics: volleyMetricsEvaluationDescriptions,
-	ScoutCodeStyleGerman:        germanEvaluationDescriptions,
-}
-
 var skillSubtypeDescriptions = map[string]map[string]string{
 	"A": {"H": "Hard spike", "P": "Soft spike/topspin", "T": "Tip"},
 	"B": {"A": "Block assist", "T": "Block attempt", "P": "Block on soft spike"},
@@ -255,22 +223,21 @@ var receptionFormationDescriptions = map[string]string{
 	"9": "Four players receiving, the player on right receives",
 }
 
-// ParseScoutCode decodes a scouting-code string using default conventions.
+// ParseScoutCode decodes a DataVolley scouting-code string.
 // Unusual or custom syntax is retained and described in ScoutCode.Issues.
 func ParseScoutCode(raw string) (ScoutCode, error) {
 	return ParseScoutCodeWithOptions(raw, ScoutCodeOptions{})
 }
 
-// ParseScoutCodeWithOptions decodes a scouting-code string using the supplied
-// conventions and metadata. Empty Style selects the default DataVolley style.
-// It returns an error for an empty code or unsupported style.
+// ParseScoutCodeWithOptions decodes a DataVolley scouting-code string using
+// the supplied metadata and location options.
 func ParseScoutCodeWithOptions(raw string, options ScoutCodeOptions) (ScoutCode, error) {
+	return parseScoutCode(raw, options)
+}
+
+func parseScoutCode(raw string, options ScoutCodeOptions) (ScoutCode, error) {
 	if raw == "" {
 		return ScoutCode{}, errors.New("scouting code is empty")
-	}
-	opt, err := normalizeScoutCodeOptions(options)
-	if err != nil {
-		return ScoutCode{}, err
 	}
 	out := ScoutCode{Raw: raw}
 	if parseAutomaticScoutCode(raw, &out) {
@@ -280,20 +247,8 @@ func ParseScoutCodeWithOptions(raw string, options ScoutCodeOptions) (ScoutCode,
 	if !ok {
 		return out, nil
 	}
-	decodeContactCode(body, opt, &out)
+	decodeContactCode(body, options, &out)
 	return out, nil
-}
-
-func normalizeScoutCodeOptions(opt ScoutCodeOptions) (ScoutCodeOptions, error) {
-	if opt.Style == "" {
-		opt.Style = ScoutCodeStyleDefault
-	}
-	switch opt.Style {
-	case ScoutCodeStyleDefault, ScoutCodeStyleVolleyMetrics, ScoutCodeStyleGerman:
-		return opt, nil
-	default:
-		return ScoutCodeOptions{}, fmt.Errorf("unsupported scouting-code style %q", opt.Style)
-	}
 }
 
 func parseAutomaticScoutCode(raw string, code *ScoutCode) bool {
@@ -312,15 +267,20 @@ func parseAutomaticScoutCode(raw string, code *ScoutCode) bool {
 		match := pointCode.FindStringSubmatch(raw)
 		setTeamFromCode(raw, code)
 		code.Point = true
-		code.HomeScore = parseCodeNumber(match[1], "home score", code)
-		code.VisitingScore = parseCodeNumber(match[2], "visiting score", code)
+		code.HomeScore = parseCodeNumber(match[2], "home score", code)
+		code.VisitingScore = parseCodeNumber(match[3], "visiting score", code)
 	case setterCode.MatchString(raw):
 		match := setterCode.FindStringSubmatch(raw)
 		code.SetterTeam = match[1]
 		code.SetterPosition = parseCodeNumber(match[2], "setter position", code)
-	case hasTeamPrefix(raw) && (raw[1] == 'P' || raw[1] == 'c'):
+	case hasTeamPrefix(raw) && (raw[1] == 'P' || raw[1] == 'c' || raw[1] == 'C'):
 		code.Team = raw[:1]
 		code.Substitution = true
+		if raw[1] == 'c' || raw[1] == 'C' {
+			if !parseSubstitutionPlayers(raw[2:], code) {
+				code.addIssue("Invalid substitution player pair", 2)
+			}
+		}
 	case hasTeamPrefix(raw) && raw[1] == 'T':
 		code.Team = raw[:1]
 		code.Timeout = true
@@ -335,6 +295,23 @@ func parseAutomaticScoutCode(raw string, code *ScoutCode) bool {
 
 func hasTeamPrefix(raw string) bool {
 	return len(raw) >= 2 && (raw[0] == '*' || raw[0] == 'a')
+}
+
+func parseSubstitutionPlayers(raw string, code *ScoutCode) bool {
+	separator := strings.IndexAny(raw, ".:")
+	if separator <= 0 || separator == len(raw)-1 || strings.ContainsAny(raw[separator+1:], ".:") {
+		return false
+	}
+	outgoing, err := strconv.Atoi(raw[:separator])
+	if err != nil || outgoing <= 0 {
+		return false
+	}
+	incoming, err := strconv.Atoi(raw[separator+1:])
+	if err != nil || incoming <= 0 {
+		return false
+	}
+	code.SubstitutionOut, code.SubstitutionIn = outgoing, incoming
+	return true
 }
 
 func setTeamFromCode(raw string, code *ScoutCode) {
@@ -393,7 +370,7 @@ func decodeContactCode(body string, opt ScoutCodeOptions, code *ScoutCode) {
 	}
 	if len(body) > 2 {
 		code.EvaluationCode = body[2:3]
-		code.Evaluation = decodeEvaluation(code.SkillCode, code.EvaluationCode, opt.Style)
+		code.Evaluation = decodeEvaluation(code.SkillCode, code.EvaluationCode)
 		if strings.HasPrefix(strings.ToLower(code.Evaluation), "unknown") {
 			code.addIssue(strings.ToUpper(code.Evaluation[:1])+code.Evaluation[1:]+": "+code.EvaluationCode, 2)
 		}
@@ -478,18 +455,14 @@ func hasCodeValue(value string) bool {
 	return value != "" && value != "~" && value != "~~"
 }
 
-// ValidateScoutCode parses a code using default conventions and returns its
-// non-fatal syntax issues. An error indicates an empty code.
+// ValidateScoutCode parses a DataVolley code and returns non-fatal syntax
+// issues. An error indicates an empty code.
 func ValidateScoutCode(raw string) ([]ScoutCodeIssue, error) {
-	parsed, err := ParseScoutCode(raw)
-	if err != nil {
-		return nil, err
-	}
-	return parsed.Issues, nil
+	return ValidateScoutCodeWithOptions(raw, ScoutCodeOptions{})
 }
 
-// ValidateScoutCodeWithOptions validates a code using the requested
-// conventions and returns its non-fatal syntax issues.
+// ValidateScoutCodeWithOptions validates a DataVolley scouting code using the
+// supplied metadata and location options.
 func ValidateScoutCodeWithOptions(raw string, options ScoutCodeOptions) ([]ScoutCodeIssue, error) {
 	parsed, err := ParseScoutCodeWithOptions(raw, options)
 	if err != nil {
@@ -517,9 +490,6 @@ func validType(skill, typ string) bool {
 	if skill == "S" || skill == "R" {
 		return strings.Contains("HMQT", typ)
 	}
-	if skill == "F" {
-		return true
-	}
 	return strings.Contains("HMQTFUON", typ)
 }
 
@@ -539,7 +509,7 @@ func decodeSkillType(skill, typ string, opt ScoutCodeOptions) string {
 			}
 			return label + " " + verb
 		}
-		label := indoorServeTypeDescriptions[opt.Style][typ]
+		label := indoorServeTypeDescriptions[typ]
 		if label != "" {
 			return label + " " + verb
 		}
@@ -554,12 +524,9 @@ func decodeSkillType(skill, typ string, opt ScoutCodeOptions) string {
 	return "Unknown " + strings.ToLower(skillName(skill)) + " type"
 }
 
-func decodeEvaluation(skill, code string, style ScoutCodeStyle) string {
-	if label := evaluationDescriptionsByStyle[style][skill][code]; label != "" {
+func decodeEvaluation(skill, code string) string {
+	if label := evaluationDescriptions[skill][code]; label != "" {
 		return label
-	}
-	if value := evaluationDescriptions[skill][code]; value != "" {
-		return value
 	}
 	name := evaluationSkillNames[skill]
 	if name == "" {

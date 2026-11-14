@@ -273,8 +273,8 @@ func (f *File) Section(name string) *Section {
 // ScoutCodeOptions builds decoder options with attack and setter-call
 // descriptions from this file's metadata sections. Missing sections are
 // represented by nil maps, which disables lookup for that code category.
-func (f *File) ScoutCodeOptions(style ScoutCodeStyle) ScoutCodeOptions {
-	options := ScoutCodeOptions{Style: style}
+func (f *File) ScoutCodeOptions() ScoutCodeOptions {
+	var options ScoutCodeOptions
 	if f == nil {
 		return options
 	}

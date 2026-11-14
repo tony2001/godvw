@@ -140,15 +140,26 @@ func ParseScoutRecord(line string) (ScoutRecord, error) {
 	return r.Record(), nil
 }
 
-// Validate checks row structure and scalar conventions, and reports
-// non-fatal scouting-code syntax issues using the default code conventions.
+// DecodedCode parses the record's Code using DataVolley mappings.
+func (x ScoutRecord) DecodedCode() (ScoutCode, error) {
+	return x.DecodedCodeWithOptions(ScoutCodeOptions{})
+}
+
+// DecodedCodeWithOptions parses the record's Code using the supplied
+// DataVolley mappings and metadata.
+func (x ScoutRecord) DecodedCodeWithOptions(options ScoutCodeOptions) (ScoutCode, error) {
+	return ParseScoutCodeWithOptions(x.Code, options)
+}
+
+// Validate checks row structure and scalar values, and reports non-fatal
+// scouting-code syntax issues using DataVolley mappings.
 // Optional phase, time, coordinate, and setter fields may be empty.
 func (x ScoutRecord) Validate() error {
 	return x.ValidateWithOptions(ScoutCodeOptions{})
 }
 
-// ValidateWithOptions checks row structure and scalar conventions, and
-// validates the code using the requested scouting conventions.
+// ValidateWithOptions checks row structure and scalar values, and validates
+// the code using the supplied metadata and location options.
 func (x ScoutRecord) ValidateWithOptions(options ScoutCodeOptions) error {
 	if x.Code == "" {
 		return errors.New("scouting code is empty")
@@ -159,7 +170,7 @@ func (x ScoutRecord) ValidateWithOptions(options ScoutCodeOptions) error {
 	if x.TrailingField != "" {
 		return errors.New("scouting row must end with an empty field")
 	}
-	parsedCode, err := ParseScoutCodeWithOptions(x.Code, options)
+	parsedCode, err := x.DecodedCodeWithOptions(options)
 	if err != nil {
 		return err
 	}
