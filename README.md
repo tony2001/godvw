@@ -50,7 +50,7 @@ the parsed `ScoutCode`, including its semantic helper methods.
 ```go
 package main
 
-import dvw "godvw"
+import dvw "github.com/tony2001/godvw"
 
 func validateScoutingLine(line string) error {
     record, err := dvw.ParseScoutRecord(line)
@@ -102,7 +102,7 @@ attack-combination and setter-call descriptions from a file:
 import (
     "fmt"
 
-    dvw "godvw"
+    dvw "github.com/tony2001/godvw"
 )
 
 func decodeExample(file *dvw.File) error {
@@ -151,7 +151,7 @@ package main
 import (
     "os"
 
-    "godvw"
+    "github.com/tony2001/godvw"
 )
 
 func copyMatch() error {

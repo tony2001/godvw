@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"godvw"
+	dvw "github.com/tony2001/godvw"
 )
 
 func ExampleRead() {
