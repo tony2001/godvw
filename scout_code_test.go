@@ -91,7 +91,7 @@ func TestParseScoutCodeAutomaticRecordsRequireTeamMarker(t *testing.T) {
 }
 
 func TestParseScoutCodeAutomaticRecordsRejectTrailingJunk(t *testing.T) {
-	for _, raw := range []string{"*p12:09extra", "*z3extra", "**3setextra", "xp12:09"} {
+	for _, raw := range []string{"*z3extra", "**3setextra", "xp12:09"} {
 		t.Run(raw, func(t *testing.T) {
 			code, err := ParseScoutCode(raw)
 			if err != nil {
@@ -104,6 +104,35 @@ func TestParseScoutCodeAutomaticRecordsRejectTrailingJunk(t *testing.T) {
 				t.Fatalf("malformed automatic code produced no diagnostic: %#v", code)
 			}
 		})
+	}
+}
+
+func TestParseScoutCodePointRetainsSuffix(t *testing.T) {
+	code, err := ParseScoutCode("ap00:01B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !code.Point || code.Team != "a" || code.HomeScore != 0 || code.VisitingScore != 1 {
+		t.Fatalf("unexpected point code: %#v", code)
+	}
+	if code.CustomCode != "B" {
+		t.Errorf("custom suffix = %q, want B", code.CustomCode)
+	}
+	if len(code.Issues) != 0 {
+		t.Errorf("point code reported issues: %#v", code.Issues)
+	}
+}
+
+func TestParseScoutCodeFastServeType(t *testing.T) {
+	code, err := ParseScoutCode("*05SN=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code.SkillType != "Fast serve" {
+		t.Errorf("skill type = %q, want Fast serve", code.SkillType)
+	}
+	if len(code.Issues) != 1 || !strings.Contains(code.Issues[0].Message, "Unexpected skill type") {
+		t.Errorf("expected nonstandard-type diagnostic, got %#v", code.Issues)
 	}
 }
 

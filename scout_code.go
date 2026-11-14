@@ -114,7 +114,7 @@ type ScoutCode struct {
 
 var (
 	endOfSetCode = regexp.MustCompile(`(?i)^\*\*\dset$`)
-	pointCode    = regexp.MustCompile(`^([*a])p(\d+):(\d+)$`)
+	pointCode    = regexp.MustCompile(`^([*a])p(\d+):(\d+)`)
 	setterCode   = regexp.MustCompile(`^([*a])z(\d+)$`)
 	playerCode   = regexp.MustCompile(`^([*a])(\d+)`)
 )
@@ -158,7 +158,7 @@ var skillTypeDescriptions = map[string]string{
 }
 
 var indoorServeTypeDescriptions = map[string]string{
-	"H": "Float", "M": "Jump-float", "Q": "Jump", "T": "Topspin",
+	"H": "Float", "M": "Jump-float", "Q": "Jump", "T": "Topspin", "N": "Fast",
 }
 
 var beachServeTypeDescriptions = map[string]string{
@@ -269,6 +269,7 @@ func parseAutomaticScoutCode(raw string, code *ScoutCode) bool {
 		code.Point = true
 		code.HomeScore = parseCodeNumber(match[2], "home score", code)
 		code.VisitingScore = parseCodeNumber(match[3], "visiting score", code)
+		code.CustomCode = raw[len(match[0]):]
 	case setterCode.MatchString(raw):
 		match := setterCode.FindStringSubmatch(raw)
 		code.SetterTeam = match[1]
